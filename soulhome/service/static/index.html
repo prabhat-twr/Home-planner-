@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Home Reconstruction</title>
+<style>
+  :root { --bg:#f7f5f0; --card:#fff; --ink:#24211d; --muted:#6f685e; --line:#e4ded3; --accent:#b4532a; --ok:#2e7d4f; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#171513; --card:#211f1c; --ink:#eee8de; --muted:#a39a8d; --line:#36322d; --accent:#e07a4f; --ok:#6cc08b; --bad:#f28b82; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  .grid { display:grid; grid-template-columns: 340px 1fr; gap: 16px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display:flex; gap:8px; flex-wrap: wrap; margin-bottom: 12px; }
+  label { display:block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  select, input[type=text], textarea { width:100%; font: inherit; padding: 7px 9px; border:1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+  textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 70px; }
+  .status { font-weight: 600; } .succeeded { color: var(--ok); } .failed { color: var(--bad); }
+  #plan { background:#fbfaf7; border-radius: 8px; overflow:auto; min-height: 120px; }
+  #plan svg { max-width: 100%; height: auto; display:block; margin: 0 auto; }
+  table { width:100%; border-collapse: collapse; font-size: 13px; } td, th { text-align:left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .kpis { display:grid; grid-template-columns: repeat(auto-fit, minmax(110px,1fr)); gap: 8px; margin: 12px 0; }
+  .kpi { border:1px solid var(--line); border-radius: 8px; padding: 8px 10px; } .kpi b { display:block; font-size: 18px; } .kpi span { font-size: 12px; color: var(--muted); }
+  pre { background: var(--bg); padding: 10px; border-radius: 8px; overflow:auto; max-height: 320px; font-size: 12px; }
+  ul.jobs { list-style:none; padding:0; margin:0; font-size: 13px; } ul.jobs li { padding: 6px 0; border-bottom: 1px solid var(--line); cursor:pointer; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Soul Home · scan → spatial model</h1>
+  <p class="lead">Reconstruction pipeline for LiDAR, ARCore depth and panorama captures. Output is the versioned spatial contract consumed by the Vastu / Feng Shui rule engine. <a href="/docs">API docs</a> · <a href="/v1/metrics">metrics</a></p>
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>Synthetic demo</h2>
+        <div class="row">
+          <button class="primary" data-demo="panorama">Panorama</button>
+          <button class="primary" data-demo="lidar">LiDAR mesh</button>
+          <button class="primary" data-demo="arcore">ARCore cloud</button>
+        </div>
+        <div class="row"><button data-demo="panorama" data-layout="1">Panorama via layout-net decode</button></div>
+        <h2 style="margin-top:12px">Real photo (GPU)</h2>
+        <div class="row"><button class="primary" data-demo="panorama-photo">Sample bedroom panorama</button></div>
+        <p style="font-size:12px;color:var(--muted);margin:0">HorizonNet layout + Depth Anything V2 + YOLO11 on a T4. First run includes a GPU cold start (~1 min).</p>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Upload a scan</h2>
+        <form id="upload">
+          <label>Tier</label>
+          <select name="tier"><option value="panorama">panorama (equirectangular photo)</option><option value="lidar">lidar (usdz / glb / ply / obj)</option><option value="arcore">arcore (ply point cloud / mesh)</option></select>
+          <label>Files</label><input type="file" name="files" multiple required>
+          <label>Metadata (JSON)</label>
+          <textarea name="metadata">{"camera_height_m": 1.5, "north_deg": 0, "room_name": "living room"}</textarea>
+          <div class="row" style="margin-top:12px"><button class="primary" type="submit">Upload &amp; process</button></div>
+        </form>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Recent scans</h2>
+        <ul class="jobs" id="jobs"></ul>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Result</h2>
+      <div id="state">Run a demo or upload a scan.</div>
+      <div class="kpis" id="kpis"></div>
+      <div id="plan"></div>
+      <h2 style="margin-top:16px">Stages</h2>
+      <table id="stages"></table>
+      <h2 style="margin-top:16px">Objects by Vastu direction</h2>
+      <table id="objects"></table>
+      <h2 style="margin-top:16px">Spatial model JSON</h2>
+      <pre id="json">—</pre>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let timer = null;
+
+async function start(promise) {
+  const r = await promise; const body = await r.json();
+  if (!r.ok) { $("#state").innerHTML = `<span class="status failed">${esc(body.detail || r.status)}</span>`; return; }
+  poll(body.id); loadJobs();
+}
+document.querySelectorAll("[data-demo]").forEach((b) => b.onclick = () =>
+  start(fetch(`/v1/demo/${b.dataset.demo}${b.dataset.layout ? "?layout_net=true" : ""}`, {method: "POST"})));
+$("#upload").onsubmit = (e) => { e.preventDefault();
+  const fd = new FormData(e.target);
+  start(fetch("/v1/scans", {method: "POST", body: fd, headers: {"Idempotency-Key": crypto.randomUUID()}})); };
+
+async function poll(id) {
+  clearTimeout(timer);
+  const r = await fetch(`/v1/scans/${id}`); const j = await r.json();
+  $("#state").innerHTML = `<code>${esc(j.id)}</code> · ${esc(j.tier)} · <span class="status ${j.status}">${j.status}</span>` +
+    (j.current_stage ? ` · stage <b>${esc(j.current_stage)}</b>` : "") + (j.attempts > 1 ? ` · attempt ${j.attempts}` : "") +
+    (j.error ? `<div class="failed">${esc(j.error.stage)}/${esc(j.error.code)}: ${esc(j.error.message)}</div>` : "");
+  if (j.status === "succeeded") return render(j);
+  if (j.status !== "failed") timer = setTimeout(() => poll(id), (j.poll_after_s || 2) * 1000);
+  else loadJobs();
+}
+
+async function render(j) {
+  const s = j.summary;
+  $("#kpis").innerHTML = [["m² floor", s.floor_area_m2], ["m ceiling", s.ceiling_height_m], ["walls", s.walls], ["doors", s.doors],
+    ["windows", s.windows], ["objects", s.objects], ["confidence", s.confidence]].map(([k, v]) => `<div class="kpi"><b>${v}</b><span>${k}</span></div>`).join("");
+  $("#plan").innerHTML = await (await fetch(j.links.floorplan)).text();
+  $("#stages").innerHTML = "<tr><th>stage</th><th>status</th><th>ms</th></tr>" + s.stages.map((x) => `<tr><td>${x.name}</td><td>${x.status}</td><td>${x.duration_ms}</td></tr>`).join("");
+  const model = await (await fetch(j.links.model)).json();
+  const objs = model.rooms.flatMap((r) => r.objects);
+  $("#objects").innerHTML = "<tr><th>object</th><th>element</th><th>16-dir</th><th>grid zone</th><th>position (m)</th></tr>" +
+    objs.map((o) => `<tr><td>${esc(o.label)}</td><td>${o.element || "–"}</td><td>${o.direction_16 || "–"}</td><td>${o.grid_zone || "–"}</td><td>${o.position.map((v) => v.toFixed(2)).join(", ")}</td></tr>`).join("");
+  $("#json").textContent = JSON.stringify(model, null, 2);
+  loadJobs();
+}
+
+async function loadJobs() {
+  const jobs = await (await fetch("/v1/scans?limit=10")).json();
+  $("#jobs").innerHTML = jobs.map((j) => `<li data-id="${j.id}"><span class="status ${j.status}">${j.status}</span> · ${j.tier} · <code>${j.id}</code></li>`).join("") || "<li>none yet</li>";
+  document.querySelectorAll("#jobs li[data-id]").forEach((li) => li.onclick = () => poll(li.dataset.id));
+}
+loadJobs();
+</script>
+</body>
+</html>
