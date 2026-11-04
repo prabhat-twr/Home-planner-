@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Home Planner</title>
+<meta name="description" content="Scan a room, get a measured floor plan with Vastu and Feng Shui zones.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="brand" href="./">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 4 L19 16 L16 28 L13 16 Z" fill="currentColor"/><circle cx="16" cy="16" r="2.5" fill="var(--bg)"/></svg>
+      <span>Soul Home</span>
+    </a>
+    <div class="status" id="apiStatus"><span class="dot"></span><span>connecting…</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Scan a room. Get a measured plan<br>and its Vastu zones.</h1>
+    <p>LiDAR meshes, ARCore depth or a single 360° photo go in. Out comes a metric floor plan with walls, doors, windows and furniture, each mapped to its compass direction.</p>
+  </section>
+
+  <div class="layout">
+    <aside class="col-left">
+      <section class="card">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="demo" role="tab">Try a demo</button>
+          <button class="tab" data-tab="upload" role="tab">Upload a scan</button>
+        </div>
+
+        <div class="tabpane" id="pane-demo">
+          <button class="demo" data-demo="panorama-photo">
+            <span class="demo-ico">📷</span>
+            <span><b>Real bedroom photo</b><small>360° panorama · HorizonNet + Depth Anything + YOLO11 on GPU</small></span>
+            <span class="tag gpu">GPU</span>
+          </button>
+          <button class="demo" data-demo="lidar">
+            <span class="demo-ico">📱</span>
+            <span><b>iPhone LiDAR mesh</b><small>Noisy, rotated mesh with floating fragments</small></span>
+          </button>
+          <button class="demo" data-demo="arcore">
+            <span class="demo-ico">🤖</span>
+            <span><b>Android ARCore cloud</b><small>Fused depth point cloud, Y-up</small></span>
+          </button>
+          <button class="demo" data-demo="panorama">
+            <span class="demo-ico">🌐</span>
+            <span><b>Synthetic panorama</b><small>Known L-shaped room, exact ground truth</small></span>
+          </button>
+          <p class="hint">The photo demo may take ~40 s the first time while a GPU starts up.</p>
+        </div>
+
+        <form class="tabpane hidden" id="pane-upload">
+          <label class="lbl">Capture type</label>
+          <div class="seg" id="tierSeg">
+            <button type="button" class="on" data-tier="panorama">360° photo</button>
+            <button type="button" data-tier="lidar">LiDAR</button>
+            <button type="button" data-tier="arcore">ARCore</button>
+          </div>
+          <label class="drop" id="drop">
+            <input type="file" id="files" multiple hidden>
+            <span id="dropText"><b>Drop files here</b> or click to choose<br><small id="dropHint">Equirectangular JPG/PNG (2:1)</small></span>
+          </label>
+          <div class="grid2">
+            <div>
+              <label class="lbl" for="north">North heading (°)</label>
+              <input id="north" type="number" min="0" max="359" step="1" value="0">
+            </div>
+            <div id="heightWrap">
+              <label class="lbl" for="height">Camera height (m)</label>
+              <input id="height" type="number" min="0.5" max="2.5" step="0.05" value="1.5">
+            </div>
+          </div>
+          <label class="lbl" for="roomName">Room name</label>
+          <input id="roomName" type="text" value="Living room" maxlength="60">
+          <button class="primary" type="submit" id="uploadBtn">Process scan</button>
+          <p class="hint">North heading is the compass bearing your phone faced at the start of the capture.</p>
+        </form>
+      </section>
+
+      <section class="card">
+        <h3>Recent scans</h3>
+        <ul class="history" id="history"><li class="muted">Nothing yet.</li></ul>
+      </section>
+    </aside>
+
+    <section class="col-main">
+      <div class="card empty" id="empty">
+        <svg viewBox="0 0 120 90" width="120" aria-hidden="true"><path d="M10 80 V20 H70 V45 H110 V80 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="5 4"/><circle cx="40" cy="50" r="4" fill="currentColor"/></svg>
+        <p>Pick a demo or upload a scan to see its floor plan here.</p>
+      </div>
+
+      <div class="card hidden" id="progress">
+        <div class="prog-head"><h3 id="progTitle">Processing</h3><code id="progId"></code></div>
+        <ol class="stages" id="stages"></ol>
+        <div class="err hidden" id="err"></div>
+      </div>
+
+      <div class="hidden" id="result">
+        <div class="kpis" id="kpis"></div>
+        <div class="warn hidden" id="warnings"></div>
+        <div class="card">
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-rtab="plan">Floor plan</button>
+            <button class="tab" data-rtab="vastu">Vastu compass</button>
+            <button class="tab" data-rtab="objects">Objects</button>
+            <button class="tab hidden" data-rtab="mesh" id="meshTab">3D mesh</button>
+            <button class="tab" data-rtab="json">Data</button>
+          </div>
+          <div class="rpane" id="r-plan"><div class="plan" id="plan"></div></div>
+          <div class="rpane hidden" id="r-vastu">
+            <div class="vastu">
+              <div id="compass"></div>
+              <div><h4>3×3 Vastu grid</h4><div class="grid9" id="grid9"></div></div>
+            </div>
+          </div>
+          <div class="rpane hidden" id="r-objects"><div class="tablewrap"><table id="objTable"></table></div></div>
+          <div class="rpane hidden" id="r-mesh">
+            <model-viewer id="mv" camera-controls auto-rotate shadow-intensity="0.6" exposure="1.1" style="width:100%;height:440px;background:var(--plan)"></model-viewer>
+          </div>
+          <div class="rpane hidden" id="r-json">
+            <div class="row"><a class="btn" id="dlJson" download>Download model.json</a><a class="btn" id="dlSvg" download>Download floorplan.svg</a></div>
+            <pre id="json"></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Pipeline stages</h3>
+          <div class="tablewrap"><table id="stageTable"></table></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap foot">
+  <span>Backend on Modal · frontend on Netlify</span>
+  <a id="apiDocs" target="_blank" rel="noopener">API docs</a>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

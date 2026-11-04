@@ -6,6 +6,7 @@ Upload -> 202 + job id -> poll status (with Retry-After hints) -> fetch the spat
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import re
 import shutil
@@ -13,6 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
@@ -42,6 +44,15 @@ def create_app(store: JobStore, artifacts: ArtifactStore, dispatch: Callable[[st
         version=PIPELINE_VERSION,
         description="Scan upload -> async reconstruction -> versioned spatial data contract "
         f"(schema {SCHEMA_VERSION}) for the Vastu / Feng Shui rule engine.",
+    )
+    # Browser frontends on another origin (e.g. the Netlify site) call this API directly.
+    origins = [o.strip() for o in os.environ.get("SOULHOME_CORS_ORIGINS", "*").split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Idempotency-Key"],
+        expose_headers=["Location", "Retry-After"],
     )
 
     def status_body(job: Job, request: Request) -> dict:

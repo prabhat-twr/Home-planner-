@@ -106,3 +106,10 @@ def test_duplicate_delivery_is_noop(client):
     first = wait(client, sid)
     again = process_job(sid, client.store, client.dispatch.artifacts)
     assert again.attempts == first["attempts"]
+
+
+def test_cors_preflight(client):
+    r = client.options("/v1/scans", headers={"Origin": "https://example.netlify.app", "Access-Control-Request-Method": "POST",
+                                             "Access-Control-Request-Headers": "idempotency-key"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] in ("*", "https://example.netlify.app")

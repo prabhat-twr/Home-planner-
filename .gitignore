@@ -8,3 +8,4 @@ data/
 !tests/fixtures/*.glb
 *.pt
 *.pth
+.netlify
