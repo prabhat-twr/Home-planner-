@@ -107,6 +107,9 @@ On a **real** bedroom panorama (the HorizonNet sample image), the run produced a
 
 ## Run it
 
+**Google Colab (free T4 GPU):** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/prabhat-twr/Home-planner-/blob/main/notebooks/soulhome_colab.ipynb) runs the tests, the synthetic demos, the real models on a sample panorama, and your own panorama or LiDAR upload.
+
+
 ```bash
 pip install -e ".[dev,usd]"
 pytest                                    # 38 tests (+1 opt-in), ~12 s, CPU only
