@@ -32,6 +32,12 @@ class ScanMeta(BaseModel):
     up_axis: Literal["y", "z"] | None = None
     units: Literal["m", "cm", "mm", "in", "ft"] | None = None
     layout_backend: Literal["auto", "depth", "horizonnet"] = "auto"
+    # panorama photos: "auto" treats 2:1 as a 360° sphere and wider images as a phone Pano (cylindrical)
+    pano_projection: Literal["auto", "equirect", "cylindrical"] = "auto"
+    pano_hfov_deg: float | None = None  # how far the user turned, if known (phone Pano)
+    pano_vfov_deg: float | None = None  # camera vertical field of view (phone Pano), default 65°
+    # process panoramas that miss the floor/ceiling edges or part of the circle anyway (low confidence)
+    allow_partial_panorama: bool = False
 
 
 def _find(input_dir: Path, stem: str | None, exts) -> Path | None:
@@ -75,7 +81,7 @@ def run_scan(
         north_deg=meta.north_deg,
         rooms=[room],
         provenance=Provenance(tier=tier, pipeline_version=PIPELINE_VERSION, stages=rec.reports, models=models),
-        quality=Quality(confidence=confidence(tier.value, warnings), warnings=warnings),
+        quality=Quality(confidence=confidence(tier.value, warnings, getattr(rec, "coverage", None)), warnings=warnings),
     )
     with rec.stage("write_artifacts"):
         (output_dir / "floorplan.svg").write_text(render_svg(model))
@@ -101,11 +107,47 @@ def _panorama(input_dir: Path, meta: ScanMeta, inference, rec: StageRecorder, mo
             bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
             if bgr is None:
                 raise PipelineError("load_inputs", "IMAGE_UNREADABLE", img_path.name)
-            h, w = bgr.shape[:2]
-            if abs(w / h - 2.0) > 0.05:
-                raise PipelineError("load_inputs", "NOT_EQUIRECTANGULAR", f"aspect {w}x{h}, expected 2:1")
-            if w > 2048:
-                bgr = cv2.resize(bgr, (2048, 1024), interpolation=cv2.INTER_AREA)
+            from ..geometry.panorama_input import to_equirect
+
+            try:
+                bgr, cov = to_equirect(bgr, 2048, meta.pano_projection, meta.pano_vfov_deg, meta.pano_hfov_deg)
+            except ValueError as e:
+                raise PipelineError("load_inputs", "NOT_A_PANORAMA", str(e)) from e
+            d["panorama"] = cov.as_dict()
+            if cov.hfov_deg < 120:
+                raise PipelineError(
+                    "load_inputs", "PANORAMA_TOO_NARROW",
+                    f"the photo covers only {cov.hfov_deg:.0f}° of the room; turn at least half way round "
+                    "(ideally a full 360°) while capturing",
+                )
+            rec.coverage = min(1.0, cov.hfov_deg / 360.0)
+            problems = []
+            if cov.hfov_deg < 330:
+                problems.append(f"it covers {cov.hfov_deg:.0f}° of the room instead of a full 360°")
+            if cov.vfov_deg < 100:
+                problems.append(
+                    f"it is only {cov.vfov_deg:.0f}° tall, so the floor and ceiling edges the layout model "
+                    "measures walls from are out of frame"
+                )
+            if problems and not meta.allow_partial_panorama:
+                kind = "a phone Pano-mode photo" if cov.projection == "cylindrical" else "a cropped panorama"
+                raise PipelineError(
+                    "load_inputs", "PANORAMA_COVERAGE_INSUFFICIENT",
+                    f"this looks like {kind} ({cov.source_size[0]}x{cov.source_size[1]}): " + "; ".join(problems)
+                    + ". Capture a full 360° photo sphere (2:1 image, e.g. Pixel Photo Sphere, a 360 camera or a "
+                    "360 capture app), or use a LiDAR scan export (GLB/OBJ/USDZ) on an iPhone Pro. "
+                    "To process this photo anyway with low confidence, set allow_partial_panorama.",
+                )
+            if cov.hfov_deg < 330:
+                warnings.append(
+                    f"partial panorama: the photo covers {cov.hfov_deg:.0f}° of 360°, so walls outside the "
+                    "sweep are inferred by the layout model rather than seen"
+                )
+            if cov.vfov_deg < 100:
+                warnings.append(
+                    f"narrow vertical view ({cov.vfov_deg:.0f}°): floor and ceiling edges are out of frame, "
+                    "room size is unreliable"
+                )
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         if rgb is None and depth_path is None and layout_path is None:
             raise PipelineError("load_inputs", "NO_INPUT", "need a panorama image, depth.npy or layout.npz")

@@ -67,8 +67,10 @@
           </div>
           <label class="drop" id="drop">
             <input type="file" id="files" multiple hidden>
-            <span id="dropText"><b>Drop files here</b> or click to choose<br><small id="dropHint">Equirectangular JPG/PNG (2:1)</small></span>
+            <span id="dropText"><b>Drop files here</b> or click to choose<br><small id="dropHint">360° photo sphere, 2:1 JPG/PNG</small></span>
           </label>
+          <div class="note hidden" id="panoNote"></div>
+          <label class="check hidden" id="partialWrap"><input type="checkbox" id="allowPartial"> Process anyway (rough, low-confidence result)</label>
           <div class="grid2">
             <div>
               <label class="lbl" for="north">North heading (°)</label>

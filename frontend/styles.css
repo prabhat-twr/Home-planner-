@@ -125,3 +125,6 @@ td.num { font-variant-numeric: tabular-nums; }
 .bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: .75; }
 pre { background: var(--soft); border-radius: 10px; padding: 12px; overflow: auto; max-height: 460px; font-size: 12px; margin: 0; }
 .foot { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; padding: 24px 16px 40px; border-top: 1px solid var(--line); }
+.note { margin-top: 10px; background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 13.5px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }

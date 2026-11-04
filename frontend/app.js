@@ -67,7 +67,7 @@
   // ----------------------------------------------------------------- upload
   let tier = "panorama";
   const HINTS = {
-    panorama: "Equirectangular JPG/PNG (2:1)",
+    panorama: "360° photo sphere, 2:1 JPG/PNG",
     lidar: "USDZ, GLB, PLY or OBJ mesh (+ optional detections.json)",
     arcore: "PLY point cloud or mesh (+ optional detections.json)",
   };
@@ -76,6 +76,7 @@
     $$("#tierSeg button").forEach((x) => x.classList.toggle("on", x === b));
     $("#dropHint").textContent = HINTS[tier];
     $("#heightWrap").classList.toggle("hidden", tier !== "panorama");
+    checkPanorama();
   }));
   const drop = $("#drop"), fileInput = $("#files");
   const showFiles = () => {
@@ -84,15 +85,41 @@
       : `<b>Drop files here</b> or click to choose<br><small id="dropHint">${HINTS[tier]}</small>`;
   };
   fileInput.addEventListener("change", showFiles);
+
+  // Phone "Pano" mode photos are wide strips, not 360° spheres: warn before uploading.
+  async function checkPanorama() {
+    const note = $("#panoNote"), wrap = $("#partialWrap");
+    note.classList.add("hidden"); wrap.classList.add("hidden"); $("#allowPartial").checked = false;
+    const img = [...fileInput.files].find((f) => /^image\//.test(f.type));
+    if (tier !== "panorama" || !img) return;
+    let w, h;
+    try { const bmp = await createImageBitmap(img); w = bmp.width; h = bmp.height; bmp.close && bmp.close(); } catch { return; }
+    const aspect = w / h;
+    if (Math.abs(aspect - 2) <= 0.05) return;
+    if (aspect < 2) {
+      note.innerHTML = `This image is ${w}×${h}. A room panorama must be a 360° photo sphere, twice as wide as it is tall.`;
+    } else {
+      const f = (h / 2) / Math.tan((65 / 2) * Math.PI / 180);
+      const sweep = Math.min(360, Math.round((w / f) * 180 / Math.PI));
+      note.innerHTML = `This looks like a phone <b>Pano-mode</b> photo (${w}×${h}, about ${sweep}° wide and 65° tall). ` +
+        `It misses the floor and ceiling edges the layout model measures walls from, so room size would be unreliable.<br>` +
+        `For accurate results use a <b>360° photo sphere</b> (Pixel Photo Sphere, a 360 camera or a 360 capture app), ` +
+        `or switch to <b>LiDAR</b> and upload a GLB/OBJ/USDZ export (iPhone Pro, e.g. from a 3D scanner app).`;
+      wrap.classList.remove("hidden");
+    }
+    note.classList.remove("hidden");
+  }
+  fileInput.addEventListener("change", checkPanorama);
   ["dragenter", "dragover"].forEach((e) => drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((e) => drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
-  drop.addEventListener("drop", (ev) => { fileInput.files = ev.dataTransfer.files; showFiles(); });
+  drop.addEventListener("drop", (ev) => { fileInput.files = ev.dataTransfer.files; showFiles(); checkPanorama(); });
 
   $("#pane-upload").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!fileInput.files.length) { alert("Choose at least one file."); return; }
     const meta = { room_name: $("#roomName").value || "room", north_deg: Number($("#north").value) || 0 };
     if (tier === "panorama") meta.camera_height_m = Number($("#height").value) || 1.5;
+    if (tier === "panorama" && $("#allowPartial").checked) meta.allow_partial_panorama = true;
     const fd = new FormData();
     fd.append("tier", tier);
     fd.append("metadata", JSON.stringify(meta));

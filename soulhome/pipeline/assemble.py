@@ -130,4 +130,6 @@ def confidence(tier: str, warnings: list[str], coverage: float | None = None) ->
     c = TIER_PRIOR[tier] - 0.05 * len(warnings)
     if coverage is not None:
         c *= 0.5 + 0.5 * coverage
+    if any(w.startswith(("narrow vertical view", "partial panorama")) for w in warnings):
+        c = min(c, 0.35)  # geometry from an incomplete panorama is a rough guess
     return round(float(np.clip(c, 0.05, 1.0)), 3)
