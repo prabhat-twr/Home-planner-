@@ -112,3 +112,22 @@ def to_equirect(
     out = cv2.remap(src, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     vfov_cov = 2 * np.degrees(np.arctan((h / 2) / f))
     return out, PanoramaCoverage("cylindrical", float(np.degrees(hfov)), float(vfov_cov), (w, h))
+
+
+def lens_vfov_from_exif(path) -> float | None:
+    """Vertical FoV of a phone Pano from the lens' 35 mm-equivalent focal length.
+
+    Pano mode is shot with the phone upright, so the frame's long side (36 mm equivalent) is vertical:
+    vfov = 2 * atan(18 / f35). iPhone main lens (26 mm) -> ~69°, ultra-wide 0.5x (13 mm) -> ~108°.
+    A small margin is taken off because Pano mode crops the frame while stitching."""
+    try:
+        from PIL import Image
+
+        with Image.open(path) as im:
+            exif = im.getexif().get_ifd(0x8769)
+        f35 = exif.get(41989)  # FocalLengthIn35mmFilm
+        if not f35:
+            return None
+        return float(np.degrees(2 * np.arctan(18.0 / float(f35)))) * 0.95
+    except Exception:  # noqa: BLE001 - missing / malformed EXIF just means "unknown"
+        return None

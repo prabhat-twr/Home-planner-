@@ -100,3 +100,17 @@ def test_partial_pano_runs_when_allowed_with_low_confidence(tmp_path):
     assert part.quality.confidence <= 0.35 < full.quality.confidence
     load = next(s for s in part.provenance.stages if s.name == "load_inputs")
     assert load.detail["panorama"]["projection"] == "cylindrical"
+
+
+def test_lens_from_exif(tmp_path):
+    from PIL import Image
+
+    from soulhome.geometry.panorama_input import lens_vfov_from_exif
+
+    im = Image.new("RGB", (300, 100))
+    exif = Image.Exif()
+    exif.get_ifd(0x8769)[41989] = 13  # iPhone ultra-wide, 35 mm equivalent
+    im.save(tmp_path / "uw.jpg", exif=exif)
+    assert abs(lens_vfov_from_exif(tmp_path / "uw.jpg") - 108.3 * 0.95) < 1
+    im.save(tmp_path / "none.jpg")
+    assert lens_vfov_from_exif(tmp_path / "none.jpg") is None

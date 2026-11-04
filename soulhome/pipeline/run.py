@@ -107,10 +107,13 @@ def _panorama(input_dir: Path, meta: ScanMeta, inference, rec: StageRecorder, mo
             bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
             if bgr is None:
                 raise PipelineError("load_inputs", "IMAGE_UNREADABLE", img_path.name)
-            from ..geometry.panorama_input import to_equirect
+            from ..geometry.panorama_input import lens_vfov_from_exif, to_equirect
 
+            vfov = meta.pano_vfov_deg
+            if not vfov and not meta.pano_hfov_deg:
+                vfov = lens_vfov_from_exif(img_path)  # phone Pano: lens focal length from EXIF, if present
             try:
-                bgr, cov = to_equirect(bgr, 2048, meta.pano_projection, meta.pano_vfov_deg, meta.pano_hfov_deg)
+                bgr, cov = to_equirect(bgr, 2048, meta.pano_projection, vfov, meta.pano_hfov_deg)
             except ValueError as e:
                 raise PipelineError("load_inputs", "NOT_A_PANORAMA", str(e)) from e
             d["panorama"] = cov.as_dict()
